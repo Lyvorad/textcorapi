@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware  # <-- IMPORTANTE
 from pydantic import BaseModel
 import google.generativeai as genai
 import os
@@ -24,14 +25,20 @@ if not INSTRUCCIONES:
 # Crear modelo de Gemini
 model = genai.GenerativeModel("gemini-2.5-flash")
 
-
 # FastAPI
 app = FastAPI(title="Mayusc Text Correction")
 
+#AGREGAR ESTO: Middleware CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permite todos los orígenes
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite todos los métodos
+    allow_headers=["*"],  # Permite todos los headers
+)
 
 class TextRequest(BaseModel):
     text: str
-
 
 @app.post("/correct")
 def correct_text(payload: TextRequest):
@@ -42,7 +49,6 @@ def correct_text(payload: TextRequest):
 
     try:
         chat = model.start_chat()
-
         chat.send_message(INSTRUCCIONES)
 
         response = chat.send_message(
@@ -50,13 +56,26 @@ def correct_text(payload: TextRequest):
         )
 
         if hasattr(response, "text") and response.text:
-            return response.text
+            #DEVUELVE COMO TEXTO PLANO, NO JSON
+            return Response(
+                content=response.text,
+                media_type="text/plain; charset=utf-8"
+            )
 
-        return "Error: empty response from Gemini."
+        return Response(content="Error: empty response from Gemini.", media_type="text/plain")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return Response(
+            content=f"Error: {str(e)}",
+            status_code=500,
+            media_type="text/plain"
+        )
 
 @app.get("/ping")
 def ping():
     return "pong"
+
+# Opcional: Ruta para verificar que la API está funcionando
+@app.get("/")
+def root():
+    return {"message": "Text Correction API", "status": "running"}
